@@ -1,0 +1,50 @@
+<?php
+if (defined('LTI_DB_LOADED')) return;
+define('LTI_DB_LOADED', true);
+// ================================================================
+//  LTI GRADING SYSTEM — db.php
+//  Single database connection + password-hashing helpers
+//  + one-time superadmin seeding
+// ================================================================
+
+$host     = 'localhost';
+$user     = 'root';           // ← your MySQL username
+$password = '';               // ← your MySQL password
+$database = 'lti_grading_system';
+
+$conn = new mysqli($host, $user, $password, $database);
+if ($conn->connect_error) {
+    error_log('LTI DB connect error: ' . $conn->connect_error);
+    die('Service temporarily unavailable.');
+}
+$conn->set_charset('utf8mb4');
+
+// ----------------------------------------------------------------
+//  HASHING CONFIG — Argon2id (PHP 7.3+) → falls back to bcrypt
+// ----------------------------------------------------------------
+define('LTI_ALGO', defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : PASSWORD_BCRYPT);
+define('LTI_OPTS', defined('PASSWORD_ARGON2ID')
+    ? ['memory_cost' => 65536, 'time_cost' => 4, 'threads' => 2]
+    : ['cost' => 12]
+);
+
+function lti_hash(string $plain): string {
+    return password_hash($plain, LTI_ALGO, LTI_OPTS);
+}
+function lti_verify(string $plain, string $hash): bool {
+    return password_verify($plain, $hash);
+}
+
+// ----------------------------------------------------------------
+//  AUTO-SEED SUPERADMIN (runs only if tbl_superadmin is empty)
+// ----------------------------------------------------------------
+$_check = $conn->query("SELECT COUNT(*) AS c FROM tbl_superadmin LIMIT 1");
+if ($_check && $_check->fetch_assoc()['c'] == 0) {
+    $_sa_user = 'Sys_admin';
+    $_sa_pass = lti_hash('LTI6767');
+    $_ins = $conn->prepare("INSERT INTO tbl_superadmin (username, password_hash) VALUES (?, ?)");
+    $_ins->bind_param('ss', $_sa_user, $_sa_pass);
+    $_ins->execute();
+    $_ins->close();
+}
+unset($_check, $_sa_user, $_sa_pass, $_ins);

@@ -1,0 +1,1 @@
+change the top bar profile that reflects the person who is log in on the system, also make the other button works on that part
